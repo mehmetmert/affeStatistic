@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>affeStats (affeLab: İstatistik, Olasılık ve Veri Bilimi) — Canlı Simülasyon Laboratuvarı</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- ========================================================================
+       1. GALTON KUTUSU (QUINCUNX) & GAUSS EĞRİSİ PRELOADER
+       ======================================================================== -->
+  <div id="statsPreloader" role="status" aria-live="polite">
+    <div class="pl-grid-bg"></div>
+
+    <div class="pl-galton-stage" aria-hidden="true">
+      <canvas id="plGaltonCanvas"></canvas>
+    </div>
+
+    <div class="pl-brand">
+      <div class="pl-mark">aS</div>
+      <span class="pl-title">affeStats</span>
+    </div>
+    <p class="pl-sub">İstatistik, Olasılık ve Veri Bilimi — Canlı Simülasyon ve Monte Carlo Laboratuvarı</p>
+
+    <div class="pl-progress-shell">
+      <div id="plBar" class="pl-progress-bar"></div>
+    </div>
+    <div class="pl-status-row">
+      <span id="plStepText">Olasılık dağılımları ve Monte Carlo motoru başlatılıyor...</span>
+      <b id="plPctText">%15</b>
+    </div>
+
+    <div class="pl-fact" id="plFactBox">
+      <b>💡 İstatistik Notu:</b> 1889'da Francis Galton'ın icat ettiği Quincunx (Galton Kutusu), saf rastgeleliğin nasıl kusursuz bir çan eğrisi oluşturduğunu gösteren ilk mekanik simülatördü.
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('affestats_theme');
+        if (saved === 'light') document.documentElement.dataset.theme = 'light';
+      } catch (_) {}
+
+      // --- Mini Galton Kutusu animasyonu (preloader'a özel, bağımsız) ---
+      (function () {
+        var canvas = document.getElementById('plGaltonCanvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var rows = 9;
+        var bins = new Array(rows + 1).fill(0);
+        var balls = [];
+        function resize() {
+          var dpr = Math.min(window.devicePixelRatio || 1, 2);
+          var rect = canvas.getBoundingClientRect();
+          canvas.width = Math.floor(rect.width * dpr);
+          canvas.height = Math.floor(rect.height * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        function spawn() {
+          balls.push({ row: 0, k: 0, t: 0, x: 0.5 });
+        }
+        var acc = 0;
+        function tick(dt) {
+          acc += dt * 5;
+          while (acc >= 1) { acc -= 1; spawn(); }
+          balls.forEach(function (b) {
+            b.t += dt * 2.6;
+            if (b.t >= 1) {
+              b.t = 0; b.row++;
+              if (Math.random() < 0.5) { b.k++; b.x += 0.5 / rows; } else { b.x -= 0.5 / rows; }
+              if (b.row >= rows) bins[b.k]++;
+            }
+          });
+          balls = balls.filter(function (b) { return b.row < rows; });
+        }
+        function draw() {
+          var rect = canvas.getBoundingClientRect();
+          var w = rect.width, h = rect.height;
+          ctx.clearRect(0, 0, w, h);
+          var pinH = h * 0.56, histH = h * 0.34, histY = pinH + 10;
+          var padX = 16, plotW = w - padX * 2;
+          ctx.fillStyle = 'rgba(148,163,184,0.5)';
+          for (var r = 0; r < rows; r++) {
+            var n = r + 1;
+            var y = 10 + (r / (rows - 1)) * (pinH - 22);
+            for (var i = 0; i < n; i++) {
+              var x = w / 2 + (i - (n - 1) / 2) * (plotW / (rows + 2));
+              ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+          ctx.fillStyle = '#00f2fe';
+          balls.forEach(function (b) {
+            var yFrac = (b.row + b.t) / rows;
+            var y = 10 + yFrac * (pinH - 22);
+            var x = w / 2 + (b.x - 0.5) * plotW * 0.92;
+            ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+          });
+          var maxC = Math.max(1, Math.max.apply(null, bins));
+          var binW = plotW / (rows + 1);
+          for (var k = 0; k <= rows; k++) {
+            var bh = (bins[k] / maxC) * histH;
+            ctx.fillStyle = 'rgba(0,242,254,0.6)';
+            ctx.fillRect(padX + k * binW + 1, histY + histH - bh, binW - 2, bh);
+          }
+        }
+        var last = performance.now();
+        function loop(now) {
+          requestAnimationFrame(loop);
+          var dt = Math.min(0.05, (now - last) / 1000);
+          last = now;
+          tick(dt);
+          draw();
+        }
+        requestAnimationFrame(loop);
+      })();
+
+      var facts = [
+        "1889'da Francis Galton'ın icat ettiği Quincunx (Galton Kutusu), saf rastgeleliğin nasıl kusursuz bir çan eğrisi oluşturduğunu gösteren ilk mekanik simülatördü.",
+        'Merkezi Limit Teoremi sayesinde, anakütle ne kadar garip veya çarpık olursa olsun, yeterince büyük örneklemlerin ortalamaları her zaman bir Normal dağılıma yakınsar.',
+        "Monte Carlo yöntemi adını, Stanislaw Ulam'ın amcasının kumar oynadığı Monako'daki kazinodan alır — rastgelelikle kesin cevaplar bulma fikrinin esin kaynağı buydu.",
+        "Anscombe Dörtlüsü'ndeki 4 veri setinin ortalaması, varyansı ve korelasyonu virgülden sonra bile aynıdır — ama grafiğe dökülünce tamamen farklı görünürler."
+      ];
+      var factEl = document.getElementById('plFactBox');
+      if (factEl) {
+        factEl.innerHTML = '<b>💡 İstatistik Notu:</b> ' + facts[Math.floor(Math.random() * facts.length)];
+      }
+
+      var steps = [
+        { pct: 32, txt: 'Olasılık Dağılımları (jStat) Hazırlanıyor...' },
+        { pct: 64, txt: 'Galton Kutusu ve Monte Carlo Motoru Kuruluyor...' },
+        { pct: 88, txt: 'Regresyon, PCA ve K-Means Çözücüleri Başlatılıyor...' },
+        { pct: 100, txt: 'affeStats Laboratuvarı Hazır!' }
+      ];
+      var bar = document.getElementById('plBar');
+      var stepTxt = document.getElementById('plStepText');
+      var pctTxt = document.getElementById('plPctText');
+      var idx = 0;
+      var timer = setInterval(function () {
+        if (idx < steps.length) {
+          if (bar) bar.style.width = steps[idx].pct + '%';
+          if (stepTxt) stepTxt.textContent = steps[idx].txt;
+          if (pctTxt) pctTxt.textContent = '%' + steps[idx].pct;
+          idx++;
+        } else {
+          clearInterval(timer);
+        }
+      }, 220);
+
+      function hidePreloader() {
+        var pl = document.getElementById('statsPreloader');
+        if (!pl || pl.classList.contains('preloader-hide')) return;
+        if (bar) bar.style.width = '100%';
+        if (pctTxt) pctTxt.textContent = '%100';
+        setTimeout(function () {
+          pl.classList.add('preloader-hide');
+          setTimeout(function () { if (pl && pl.parentNode) pl.parentNode.removeChild(pl); }, 650);
+        }, 250);
+      }
+      window.addEventListener('load', function () { setTimeout(hidePreloader, 700); });
+      setTimeout(hidePreloader, 2200);
+    })();
+  </script>
+
+  <!-- ========================================================================
+       2. ÜST GEZİNME ÇUBUĞU (TOPBAR & 7 ANA MODÜL)
+       ======================================================================== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">aS</div>
+      <div>
+        <span class="brand-title">affeStats</span>
+        <span class="brand-ver">affeLab: İstatistik · scienceWiki Ekosistemi</span>
+      </div>
+    </div>
+
+    <nav class="main-nav" aria-label="7 Ana İstatistik Laboratuvar Modülü">
+      <button class="nav-tab active" data-mod="mod1">1. Galton & CLT <span class="nav-badge">Ana Ekran</span></button>
+      <button class="nav-tab" data-mod="mod2">2. Dağılımlar Atlası</button>
+      <button class="nav-tab" data-mod="mod3">3. Çıkarımsal İstatistik <span class="nav-badge">χ² Testi</span></button>
+      <button class="nav-tab" data-mod="mod4">4. Bayes & Olasılık</button>
+      <button class="nav-tab" data-mod="mod5">5. Regresyon & Korelasyon <span class="nav-badge">OLS</span></button>
+      <button class="nav-tab" data-mod="mod6">6. Monte Carlo</button>
+      <button class="nav-tab" data-mod="mod7">7. PCA & Kümeleme</button>
+      <button class="nav-tab" data-mod="mod8">8. Temel Kavramlar <span class="nav-badge">Olasılık</span></button>
+    </nav>
+
+    <div class="top-actions">
+      <button id="openTheoryDrawerBtn" class="icon-btn theory-trigger-btn" title="Bu laboratuvarın Sezgisel Mantığını, Keşif Tarihini, Formüllerini ve Görevlerini Aç">📚 Akademik Bilgi & Teori</button>
+      <button id="themeToggleBtn" class="icon-btn" title="Karanlık Laboratuvar / Aydınlık Akademik Tema">☀️ Aydınlık Tema</button>
+      <button id="fullscreenBtn" class="icon-btn" title="Tam Ekran Modu">⛶</button>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       MODÜL 1: GALTON KUTUSU, CLT VE BÜYÜK SAYILAR YASASI
+       ======================================================================== -->
+  <main id="mod1" class="module-section active">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="1_1">🔵 1.1. Galton Kutusu (Quincunx)</button>
+        <button class="subtab-btn" data-sub="1_2">📊 1.2. Merkezi Limit Teoremi</button>
+        <button class="subtab-btn" data-sub="1_3">📉 1.3. Büyük Sayılar Yasası</button>
+      </div>
+      <div class="subtab-meta"><span>Referans: <code>Seeing Theory · PhET Plinko</code></span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod1_sub_1_1" class="hud-section">
+          <div class="hud-title"><span>Çivi Satırı ve Olasılık</span></div>
+          <div class="ctrl-row">
+            <div class="ctrl-label"><span>Çivi Satırı Sayısı (n)</span><b id="galtonRowsVal">16</b></div>
+            <input id="galtonRowsSlider" type="range" min="5" max="30" step="1" value="16" />
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-label"><span>Sağa Düşme Olasılığı (p)</span><b id="galtonPVal">0.50</b></div>
+            <input id="galtonPSlider" type="range" min="0.1" max="0.9" step="0.02" value="0.5" />
+          </div>
+          <button id="galtonResetBtn" class="action-btn crimson">↺ Sıfırla</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Teorik μ = np</small><b id="galtonMeanVal">8.00</b></div>
+            <div class="tel-card"><small>Teorik σ</small><b id="galtonStdVal">2.00</b></div>
+            <div class="tel-card"><small>Toplam Top</small><b id="galtonTotalVal">0</b></div>
+          </div>
+        </div>
+        <div id="mod1_sub_1_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Anakütle Dağılımı</span></div>
+          <div class="btn-grid">
+            <button class="mode-btn active" data-population="uniform">Tekdüze</button>
+            <button class="mode-btn" data-population="exponential">Üstel (Çarpık)</button>
+            <button class="mode-btn" data-population="bimodal">İki Tepeli</button>
+          </div>
+          <div class="ctrl-row" style="margin-top:6px;">
+            <div class="ctrl-label"><span>Örneklem Büyüklüğü (n)</span></div>
+            <select id="cltNSelect" class="bio-select">
+              <option value="1">n = 1</option>
+              <option value="2">n = 2</option>
+              <option value="5" selected>n = 5</option>
+              <option value="30">n = 30</option>
+              <option value="100">n = 100</option>
+            </select>
+          </div>
+          <div class="btn-grid" style="margin-top:6px;">
+            <button id="cltDrawBtn" class="action-btn">🎲 Örneklem Çek</button>
+            <button id="cltDraw100Btn" class="action-btn purple">🎲 ×100 Çek</button>
+          </div>
+          <button id="cltResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+        </div>
+        <div id="mod1_sub_1_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Büyük Sayılar Yasası</span></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">
+            <input id="lnnLoadedChk" type="checkbox" /> Hileli zar (6 gelme ihtimali yüksek)
+          </label>
+          <div class="btn-grid" style="margin-top:6px;">
+            <button id="lnnStartBtn" class="action-btn">▶ Başlat</button>
+            <button id="lnnResetBtn" class="action-btn crimson">↺ Sıfırla</button>
+          </div>
+          <div class="tel-card" style="margin-top:6px;"><small>Kümülatif Ortalama</small><b id="lnnCumAvgVal">—</b></div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">Canlı simülasyon — gerçek jStat Binom/Normal matematiği</span></div>
+        <div class="stage-viewport"><div class="stage-canvas-wrap"><canvas id="statsStageCanvas_1"></canvas></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 2: İNTERAKTİF OLASILIK DAĞILIMLARI ATLASI
+       ======================================================================== -->
+  <main id="mod2" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="2_1">📐 2.1. Dağılımlar Atlası & Canlı Alan Hesaplayıcı</button>
+        <button class="subtab-btn" data-sub="2_2">📋 2.2. İstatistik Tabloları (Z / t / χ²)</button>
+      </div>
+      <div class="subtab-meta"><span>8 dağılım · sürüklenebilir [a,b] sınırları · PDF/PMF + CDF eşzamanlı</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod2_sub_2_1">
+          <div class="hud-section">
+            <div class="hud-title"><span>Dağılım Seç</span></div>
+            <div id="distList" class="lab-card-grid single-col"></div>
+          </div>
+          <div class="hud-section">
+            <div class="hud-title"><span>Parametreler</span></div>
+            <div id="distParamControls"></div>
+          </div>
+          <div class="hud-section">
+            <div class="tel-card"><small>P(a ≤ X ≤ b)</small><b id="distAreaResult" style="font-size:13px;">—</b></div>
+            <div class="tel-card" style="margin-top:6px;"><small>Beklenen Değer E[X]</small><b id="distMeanVal">—</b></div>
+          </div>
+        </div>
+        <div id="mod2_sub_2_2" hidden>
+          <div class="hud-section">
+            <div class="hud-title"><span>Tablo Türü</span></div>
+            <div class="lab-mode-switch cols-3">
+              <button class="lab-mode-tab active" data-tablekind="z">Z-Tablosu</button>
+              <button class="lab-mode-tab" data-tablekind="t">t-Tablosu</button>
+              <button class="lab-mode-tab" data-tablekind="chisq">χ²-Tablosu</button>
+            </div>
+            <div class="ctrl-row" style="margin-top:8px;">
+              <div class="ctrl-label"><span>Z-Tablosu için: bir z değeri girip hücreyi vurgulayın</span></div>
+              <input id="tableLookupInput" type="number" step="0.01" class="bio-input" placeholder="Ör: 1.96" />
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">Tüm değerler gerçek zamanlı jStat hesaplarıdır — basılı tablo taraması değil, her z/df/α kombinasyonu için tam hassasiyetle üretilir.</p>
+          </div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">🖱️ 2.1: Sarı tutamaçları sürükleyin · 2.2: Klasik ders kitabı tabloları</span></div>
+        <div class="stage-viewport">
+          <div class="stage-canvas-wrap"><canvas id="statsStageCanvas_2"></canvas></div>
+          <div id="statsTableWrap_2" hidden style="position:absolute;inset:0;overflow:auto;padding:16px;">
+            <div id="statsTableBox_2"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 3: ÇIKARIMSAL İSTATİSTİK
+       ======================================================================== -->
+  <main id="mod3" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="3_1">⚖️ 3.1. H₀ vs H₁ (Tip I/II, Güç)</button>
+        <button class="subtab-btn" data-sub="3_2">🌧️ 3.2. Güven Aralığı Yağmuru</button>
+        <button class="subtab-btn" data-sub="3_3">🔁 3.3. Bootstrap</button>
+        <button class="subtab-btn" data-sub="3_4">🎲 3.4. Ki-Kare (χ²) Testi</button>
+      </div>
+      <div class="subtab-meta"><span>Referans: <code>R Psychologist · rpsychologist.com/d3/nhst</code></span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod3_sub_3_1" class="hud-section">
+          <div class="hud-title"><span>Hipotez Testi Parametreleri</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Örneklem Büyüklüğü (n)</span><b id="nhstNVal">30</b></div><input id="nhstNSlider" type="range" min="5" max="200" step="1" value="30" /></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Etki Büyüklüğü (Cohen's d)</span><b id="nhstDVal">0.50</b></div><input id="nhstDSlider" type="range" min="0" max="2" step="0.05" value="0.5" /></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Anlamlılık Düzeyi (α)</span><b id="nhstAlphaVal">0.050</b></div><input id="nhstAlphaSlider" type="range" min="0.01" max="0.2" step="0.01" value="0.05" /></div>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Tip I (α)</small><b id="nhstAlphaVal2" style="color:#f43f5e;">—</b></div>
+            <div class="tel-card"><small>Tip II (β)</small><b id="nhstBetaVal" style="color:#38bdf8;">—</b></div>
+            <div class="tel-card"><small>Güç (1−β)</small><b id="nhstPowerVal" style="color:#34d399;">—</b></div>
+          </div>
+        </div>
+        <div id="mod3_sub_3_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Güven Aralığı Ayarları</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Güven Düzeyi</span></div>
+            <select id="ciLevelSelect" class="bio-select"><option value="0.90">%90</option><option value="0.95" selected>%95</option><option value="0.99">%99</option></select>
+          </div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Örneklem Büyüklüğü (n)</span><b id="ciNVal">20</b></div><input id="ciNSlider" type="range" min="5" max="100" step="1" value="20" /></div>
+          <div class="btn-grid" style="margin-top:6px;"><button id="ciDraw100Btn" class="action-btn">🎲 ×100 Örneklem Çek</button><button id="ciResetBtn" class="action-btn crimson">↺ Sıfırla</button></div>
+          <div class="tel-card" style="margin-top:6px;"><small>Gerçek μ'yü Yakalama Oranı</small><b id="ciHitRate">—</b></div>
+        </div>
+        <div id="mod3_sub_3_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Bootstrap Ayarları</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>İstatistik</span></div>
+            <select id="bootStatSelect" class="bio-select"><option value="mean">Ortalama</option><option value="median">Medyan</option></select>
+          </div>
+          <button id="bootRunBtn" class="action-btn" style="margin-top:6px;">🔁 2000 Yeniden Örnekle</button>
+          <button id="bootResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Bootstrap SE</small><b id="bootSEVal">—</b></div>
+            <div class="tel-card"><small>%95 Yüzdelik CI</small><b id="bootCIVal" style="font-size:11px;">—</b></div>
+          </div>
+          <div class="tel-card" style="margin-top:4px;"><small>Örneklem Sayısı</small><b id="bootCountVal">0</b></div>
+        </div>
+        <div id="mod3_sub_3_4" class="hud-section" hidden>
+          <div class="hud-title"><span>Ki-Kare Testi Modu</span></div>
+          <div class="lab-mode-switch cols-2">
+            <button class="lab-mode-tab active" data-chisqmode="goodness">Uygunluk</button>
+            <button class="lab-mode-tab" data-chisqmode="independence">Bağımsızlık</button>
+          </div>
+          <button id="chisqRoll100Btn" class="action-btn" style="margin-top:6px;">🎲 Zarı ×100 At</button>
+          <button id="chisqResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+          <div id="chisqTableBox" style="margin-top:6px;" hidden></div>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>χ² İstatistiği</small><b id="chisqStatVal">—</b></div>
+            <div class="tel-card"><small>Serbestlik Derecesi</small><b id="chisqDofVal">—</b></div>
+          </div>
+          <div class="tel-card" style="margin-top:4px;"><small>p-değeri</small><b id="chisqPVal">—</b></div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">Canlı istatistiksel hesaplayıcı — jStat ile tam hassasiyet</span></div>
+        <div class="stage-viewport"><div class="stage-canvas-wrap"><canvas id="statsStageCanvas_3"></canvas></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 4: SEZGİSEL BAYES TEOREMİ VE KOŞULLU OLASILIK
+       ======================================================================== -->
+  <main id="mod4" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="4_1">🏥 4.1. Tıbbi Test Paradoksu</button>
+        <button class="subtab-btn" data-sub="4_2">📈 4.2. Bayesçi Güncelleme</button>
+        <button class="subtab-btn" data-sub="4_3">🚪 4.3. Monty Hall Paradoksu</button>
+      </div>
+      <div class="subtab-meta"><span>Rahip Thomas Bayes (1763) · Alan Turing & Enigma</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod4_sub_4_1" class="hud-section">
+          <div class="hud-title"><span>Tıbbi Test Parametreleri</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Hastalık Yaygınlığı P(A)</span><b id="medPrevVal">%1.00</b></div><input id="medPrevSlider" type="range" min="0.001" max="0.3" step="0.001" value="0.01" /></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Duyarlılık (Sensitivity) P(B|A)</span><b id="medSensVal">%99.0</b></div><input id="medSensSlider" type="range" min="0.5" max="1" step="0.005" value="0.99" /></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Özgüllük (Specificity)</span><b id="medSpecVal">%95.0</b></div><input id="medSpecSlider" type="range" min="0.5" max="1" step="0.005" value="0.95" /></div>
+          <div class="tel-card" style="margin-top:6px;"><small>P(Hasta | Test Pozitif)</small><b id="medResultVal" style="font-size:14px;">—</b></div>
+          <div class="tel-card" style="margin-top:4px;"><small>Hesap</small><b id="medTpFpVal" style="font-size:11px;">—</b></div>
+        </div>
+        <div id="mod4_sub_4_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Önsel Dağılım (Beta Prior)</span></div>
+          <div class="btn-grid">
+            <button class="mode-btn active" data-prior="1,1">Düz/Bilgisiz Beta(1,1)</button>
+            <button class="mode-btn" data-prior="20,20">Şüpheci Beta(20,20)</button>
+            <button class="mode-btn" data-prior="5,1">İyimser Beta(5,1)</button>
+          </div>
+          <div class="btn-grid" style="margin-top:6px;">
+            <button id="bayesSuccessBtn" class="action-btn emerald">✓ Başarı Ekle</button>
+            <button id="bayesFailBtn" class="action-btn crimson">✗ Başarısızlık Ekle</button>
+          </div>
+          <button id="bayesReset20Btn" class="action-btn purple" style="margin-top:6px;">🎲 20 Rastgele Veri Ekle</button>
+          <button id="bayesResetBtn" class="action-btn" style="margin-top:6px;">↺ Sıfırla</button>
+          <div class="tel-card" style="margin-top:6px;"><small>Sonsal Ortalama E[p|veri]</small><b id="bayesPostMeanVal">—</b></div>
+        </div>
+        <div id="mod4_sub_4_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Monty Hall — Strateji İstatistikleri</span></div>
+          <div class="telemetry-grid">
+            <div class="tel-card"><small>Kalma Kazanma Oranı</small><b id="montyStayRate">—</b></div>
+            <div class="tel-card"><small>Değiştirme Kazanma Oranı</small><b id="montySwitchRate">—</b></div>
+          </div>
+          <button id="montyAuto10kBtn" class="action-btn purple" style="margin-top:6px;">🤖 10.000 Kez Otomatik Oyna</button>
+          <button id="montyNewRoundBtn" class="action-btn" style="margin-top:6px;">🔄 Yeni Tur</button>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">Canlı Bayes hesaplayıcı</span></div>
+        <div class="stage-viewport">
+          <div class="stage-canvas-wrap"><canvas id="statsStageCanvas_4"></canvas></div>
+          <div id="mod4MontyOverlay" class="stage-overlay-bottom" style="position:absolute;bottom:12px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;">
+            <div id="montyDoors" style="display:flex;gap:16px;pointer-events:auto;"></div>
+            <div id="montyStatus" style="font-family:var(--mono);font-size:12px;color:var(--muted);">Bir kapı seçin.</div>
+            <div style="display:flex;gap:8px;pointer-events:auto;">
+              <button id="montyStayBtn" class="action-btn">Kal</button>
+              <button id="montySwitchBtn" class="action-btn emerald">Değiştir</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 5: REGRESYON, KORELASYON, ANOVA VE AŞIRI ÖĞRENME
+       ======================================================================== -->
+  <main id="mod5" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="5_1">📈 5.1. Canlı OLS & Hata Kareleri</button>
+        <button class="subtab-btn" data-sub="5_2">🦕 5.2. Anscombe Dörtlüsü</button>
+        <button class="subtab-btn" data-sub="5_3">🌀 5.3. Polinom & Overfitting</button>
+      </div>
+      <div class="subtab-meta"><span>Legendre & Gauss (1805/1809) · Pearson (1896) · Anscombe (1973)</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod5_sub_5_1" class="hud-section">
+          <div class="hud-title"><span>Veri Noktaları</span></div>
+          <div class="btn-grid">
+            <button id="olsReseedBtn" class="action-btn">🎲 Yeniden Oluştur</button>
+            <button id="olsClearBtn" class="action-btn crimson">🗑️ Temizle</button>
+          </div>
+          <button id="olsOutlierBtn" class="action-btn amber" style="margin-top:6px;">⚠️ Aykırı Değer Ekle</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Pearson r</small><b id="olsRVal">—</b></div>
+            <div class="tel-card"><small>Spearman ρ</small><b id="olsRhoVal">—</b></div>
+          </div>
+          <div class="tel-card" style="margin-top:4px;"><small>R² (Belirlilik)</small><b id="olsR2Val">—</b></div>
+          <div class="tel-card" style="margin-top:4px;"><small>Regresyon Denklemi</small><b id="olsEqVal" style="font-size:11px;">—</b></div>
+          <div id="olsAnovaTable" style="margin-top:6px;font-size:11px;"></div>
+        </div>
+        <div id="mod5_sub_5_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Anscombe Veri Seti</span></div>
+          <div class="lab-mode-switch cols-4">
+            <button class="lab-mode-tab active" data-ansset="I">I</button>
+            <button class="lab-mode-tab" data-ansset="II">II</button>
+            <button class="lab-mode-tab" data-ansset="III">III</button>
+            <button class="lab-mode-tab" data-ansset="IV">IV</button>
+          </div>
+          <p id="ansDesc" style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;"></p>
+          <div id="ansStatsTable" style="margin-top:6px;"></div>
+        </div>
+        <div id="mod5_sub_5_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Polinom Derecesi</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Derece (d)</span><b id="polyDegreeVal">3</b></div><input id="polyDegreeSlider" type="range" min="1" max="15" step="1" value="3" /></div>
+          <button id="polyReseedBtn" class="action-btn" style="margin-top:6px;">🎲 Veriyi Yeniden Oluştur</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Eğitim MSE</small><b id="polyTrainMSE" style="color:#00f2fe;">—</b></div>
+            <div class="tel-card"><small>Test MSE</small><b id="polyTestMSE" style="color:#f43f5e;">—</b></div>
+          </div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">🖱️ Tuvale tıklayarak nokta ekleyin, sürükleyin; Shift+tık veya çift tık ile silin</span></div>
+        <div class="stage-viewport"><div class="stage-canvas-wrap"><canvas id="statsStageCanvas_5"></canvas></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 6: MONTE CARLO SİMÜLASYONLARI VE STOKASTİK SÜREÇLER
+       ======================================================================== -->
+  <main id="mod6" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="6_1">🎯 6.1. Monte Carlo π Tahmini</button>
+        <button class="subtab-btn" data-sub="6_2">🔗 6.2. Markov Zincirleri</button>
+        <button class="subtab-btn" data-sub="6_3">📉 6.3. Rastgele Yürüyüş</button>
+      </div>
+      <div class="subtab-meta"><span>Ulam & von Neumann (1940'lar) · Markov (1906) · Einstein (1905)</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod6_sub_6_1" class="hud-section">
+          <div class="hud-title"><span>Monte Carlo π</span></div>
+          <button id="piResetBtn" class="action-btn crimson">↺ Sıfırla</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>π Tahmini</small><b id="piEstVal">—</b></div>
+            <div class="tel-card"><small>Mutlak Hata</small><b id="piErrVal">—</b></div>
+          </div>
+          <div class="tel-card" style="margin-top:4px;"><small>Toplam Dart (N)</small><b id="piNVal">0</b></div>
+        </div>
+        <div id="mod6_sub_6_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Geçiş Matrisi P(i→j)</span></div>
+          <div id="markovMatrixBox"></div>
+          <button id="markovResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+          <div class="tel-card" style="margin-top:6px;"><small>Durağan Dağılım</small><b id="markovStationaryVal" style="font-size:11px;">—</b></div>
+        </div>
+        <div id="mod6_sub_6_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Yürüyüşçü Sayısı</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>N (paralel yürüyüş)</span><b id="walkWalkersVal">120</b></div><input id="walkWalkersSlider" type="range" min="10" max="300" step="10" value="120" /></div>
+          <button id="walkResetBtn" class="action-btn crimson">↺ Sıfırla</button>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Zaman (t)</small><b id="walkTVal">0</b></div>
+            <div class="tel-card"><small>√t Zarfı</small><b id="walkEnvVal">—</b></div>
+          </div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">Canlı stokastik simülasyon</span></div>
+        <div class="stage-viewport"><div class="stage-canvas-wrap"><canvas id="statsStageCanvas_6"></canvas></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 7: ÇOK DEĞİŞKENLİ İSTATİSTİK, PCA VE KÜMELEME
+       ======================================================================== -->
+  <main id="mod7" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="7_1">🧊 7.1. 3B Temel Bileşenler Analizi (PCA)</button>
+        <button class="subtab-btn" data-sub="7_2">🔵 7.2. Canlı K-Means Kümeleme</button>
+      </div>
+      <div class="subtab-meta"><span>Pearson (1901) · Hotelling (1933) · MacQueen (1967)</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod7_sub_7_1" class="hud-section">
+          <div class="hud-title"><span>PCA Kontrolleri</span></div>
+          <button id="pcaReseedBtn" class="action-btn">🎲 Veri Bulutunu Yeniden Oluştur</button>
+          <div id="pcaVarTable" style="margin-top:8px;"></div>
+        </div>
+        <div id="mod7_sub_7_2" class="hud-section" hidden>
+          <div class="hud-title"><span>K-Means Kontrolleri</span></div>
+          <div class="ctrl-row"><div class="ctrl-label"><span>Küme Sayısı (K)</span><b id="kmeansKVal">3</b></div><input id="kmeansKSlider" type="range" min="2" max="6" step="1" value="3" /></div>
+          <div class="btn-grid" style="margin-top:6px;">
+            <button id="kmeansStepBtn" class="action-btn">İleri (1 Adım)</button>
+            <button id="kmeansAutoBtn" class="lab-tool-btn">▶ Otomatik Çalıştır</button>
+          </div>
+          <button id="kmeansResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Yeni Veri</button>
+          <div class="tel-card" style="margin-top:6px;"><small>İterasyon</small><b id="kmeansIterVal">0</b></div>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">7.1: sürükleyip döndürün · 7.2: Voronoi sınırları canlı güncellenir</span></div>
+        <div class="stage-viewport">
+          <div id="statsStage3D_7" class="stage-canvas-wrap"></div>
+          <canvas id="statsStageCanvas_7" hidden style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       MODÜL 8: TEMEL OLASILIK VE ORTALAMALAR
+       ======================================================================== -->
+  <main id="mod8" class="module-section">
+    <div class="subtab-bar">
+      <div class="subtab-group">
+        <button class="subtab-btn active" data-sub="8_1">🪙 8.1. Olasılık: Para & Zar</button>
+        <button class="subtab-btn" data-sub="8_2">➗ 8.2. Ortalamalar (AM/GM/HM)</button>
+        <button class="subtab-btn" data-sub="8_3">🔔 8.3. Normal Dağılım & Çan Eğrisi</button>
+        <button class="subtab-btn" data-sub="8_4">🔗 8.4. Korelasyon Galerisi</button>
+      </div>
+      <div class="subtab-meta"><span>Pascal & Fermat (1654) · Gauss (1809) · Galton & Pearson</span></div>
+    </div>
+    <div class="lab-grid two-col">
+      <aside class="hud-panel">
+        <div id="mod8_sub_8_1" class="hud-section">
+          <div class="hud-title"><span>Deney Seç</span></div>
+          <div class="lab-mode-switch cols-2">
+            <button class="lab-mode-tab active" data-probmode="coin">🪙 Madeni Para</button>
+            <button class="lab-mode-tab" data-probmode="dice">🎲 Zar</button>
+          </div>
+          <div id="probCoinBox" style="margin-top:8px;">
+            <div class="btn-grid">
+              <button id="coinFlipBtn" class="action-btn">🪙 Bir Kez At</button>
+              <button id="coinFlip100Btn" class="action-btn purple">🪙 ×100 At</button>
+            </div>
+            <button id="coinResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+            <div class="telemetry-grid" style="margin-top:6px;">
+              <div class="tel-card"><small>Yazı</small><b id="coinHeadsVal">0</b></div>
+              <div class="tel-card"><small>Tura</small><b id="coinTailsVal">0</b></div>
+            </div>
+            <div class="telemetry-grid" style="margin-top:4px;">
+              <div class="tel-card"><small>Toplam Atış</small><b id="coinTotalVal">0</b></div>
+              <div class="tel-card"><small>Deneysel P(Yazı)</small><b id="coinEmpVal">—</b></div>
+            </div>
+          </div>
+          <div id="probDiceBox" style="margin-top:8px;" hidden>
+            <div class="btn-grid">
+              <button id="diceRollBtn" class="action-btn">🎲 Bir Kez At</button>
+              <button id="diceRoll100Btn" class="action-btn purple">🎲 ×100 At</button>
+            </div>
+            <button id="diceResetBtn" class="action-btn crimson" style="margin-top:6px;">↺ Sıfırla</button>
+            <div class="tel-card" style="margin-top:6px;"><small>Son Atış</small><b id="diceLastVal">—</b></div>
+            <div class="telemetry-grid" style="margin-top:4px;">
+              <div class="tel-card"><small>Toplam Atış</small><b id="diceTotalVal">0</b></div>
+              <div class="tel-card"><small>P(Toplam=7)</small><b id="dice7Val" style="font-size:10.5px;">—</b></div>
+            </div>
+          </div>
+        </div>
+        <div id="mod8_sub_8_2" class="hud-section" hidden>
+          <div class="hud-title"><span>Veri Seti / Senaryo</span></div>
+          <div class="btn-grid">
+            <button class="mode-btn" data-avgscenario="investment">💰 Yatırım Getirisi</button>
+            <button class="mode-btn" data-avgscenario="speed">🚗 Hız Ortalaması</button>
+          </div>
+          <div class="btn-grid" style="margin-top:4px;">
+            <button class="mode-btn" data-avgscenario="grades">📝 Sınav Notları</button>
+            <button id="avgRandomBtn" class="mode-btn">🎲 Rastgele</button>
+          </div>
+          <div class="ctrl-row" style="margin-top:6px;">
+            <div class="ctrl-label"><span>Veri (virgülle ayrılmış)</span></div>
+            <input id="avgDataInput" type="text" class="bio-input" />
+          </div>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>Aritmetik (AM)</small><b id="avgAMVal" style="color:#00f2fe;">—</b></div>
+            <div class="tel-card"><small>Geometrik (GM)</small><b id="avgGMVal" style="color:#a855f7;">—</b></div>
+          </div>
+          <div class="telemetry-grid" style="margin-top:4px;">
+            <div class="tel-card"><small>Harmonik (HM)</small><b id="avgHMVal" style="color:#f59e0b;">—</b></div>
+            <div class="tel-card"><small>Medyan</small><b id="avgMedianVal" style="color:#f43f5e;">—</b></div>
+          </div>
+          <div class="tel-card" style="margin-top:4px;"><small>Mod (En Sık Değer)</small><b id="avgModeVal" style="font-size:11px;color:#34d399;">—</b></div>
+        </div>
+        <div id="mod8_sub_8_3" class="hud-section" hidden>
+          <div class="hud-title"><span>Gerçek Hayat Senaryosu</span></div>
+          <div class="btn-grid">
+            <button class="mode-btn active" data-normscenario="height">📏 İnsan Boyu</button>
+            <button class="mode-btn" data-normscenario="iq">🧠 IQ Puanı</button>
+          </div>
+          <div class="btn-grid" style="margin-top:4px;">
+            <button class="mode-btn" data-normscenario="exam">📝 Sınav Puanı</button>
+            <button class="mode-btn" data-normscenario="custom">⚙️ Özel</button>
+          </div>
+          <div id="normalCustomRow" hidden style="margin-top:6px;">
+            <div class="ctrl-row"><div class="ctrl-label"><span>μ (Ortalama)</span></div><input id="normalMuSlider" type="range" min="-10" max="200" step="1" value="0" /></div>
+            <div class="ctrl-row"><div class="ctrl-label"><span>σ (Std. Sapma)</span></div><input id="normalSigmaSlider" type="range" min="0.5" max="30" step="0.5" value="1" /></div>
+          </div>
+          <div class="ctrl-row" style="margin-top:6px;">
+            <div class="ctrl-label"><span>Bir Değer Girin (z-skoru için)</span></div>
+            <input id="normalValueInput" type="number" class="bio-input" placeholder="Ör: 130" />
+          </div>
+          <div class="telemetry-grid" style="margin-top:6px;">
+            <div class="tel-card"><small>μ</small><b id="normalMuVal">—</b></div>
+            <div class="tel-card"><small>σ</small><b id="normalSigmaVal">—</b></div>
+          </div>
+        </div>
+        <div id="mod8_sub_8_4" class="hud-section" hidden>
+          <div class="hud-title"><span>Korelasyon Gücü (r) Seç</span></div>
+          <div id="corrPresetBox" class="lab-chip-wrap"></div>
+          <button id="corrGotoM5Btn" class="action-btn purple" style="margin-top:10px;">📈 Tam Regresyon Aracı (Modül 5)'ne Git</button>
+        </div>
+      </aside>
+      <section class="stage-panel">
+        <div class="lab-toolbar"><span class="lab-tool-btn" style="pointer-events:none;color:var(--muted);">Temel olasılık ve betimsel istatistik kavramları</span></div>
+        <div class="stage-viewport"><div class="stage-canvas-wrap"><canvas id="statsStageCanvas_8"></canvas></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       SCIENCEWIKI "AKADEMİK BİLGİ & TEORİ" ÇEKMECESİ
+       ======================================================================== -->
+  <div id="theoryDrawerBackdrop" class="theory-drawer-backdrop" hidden>
+    <aside class="theory-drawer">
+      <div class="theory-head">
+        <div>
+          <h3 id="theoryDrawerTitle" style="font-size:17px;font-weight:800;">—</h3>
+          <p style="font-size:11.5px;color:var(--muted);">scienceWiki · Akademik Bilgi & Teori</p>
+        </div>
+        <button id="closeTheoryDrawerBtn" class="icon-btn">✕ Kapat</button>
+      </div>
+      <div class="theory-tabs">
+        <button class="theory-tab-btn active" data-ttab="intuitive">💡 Sezgisel Mantık</button>
+        <button class="theory-tab-btn" data-ttab="history">🏛️ Keşif Tarihi</button>
+        <button class="theory-tab-btn" data-ttab="formulas">📐 Formüller</button>
+        <button class="theory-tab-btn" data-ttab="tasks">🎯 Bunu Dene!</button>
+      </div>
+      <div id="theoryDrawerBody" class="theory-body"></div>
+    </aside>
+  </div>
+
+  <!-- Kütüphaneler ve Modüler affeStats Motoru -->
+  <script src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/stats-core.js"></script>
+  <script src="js/mod1-galton.js"></script>
+  <script src="js/mod2-distributions.js"></script>
+  <script src="js/mod3-inference.js"></script>
+  <script src="js/mod4-bayes.js"></script>
+  <script src="js/mod5-regression.js"></script>
+  <script src="js/mod6-montecarlo.js"></script>
+  <script src="js/mod7-multivariate.js"></script>
+  <script src="js/mod8-basics.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
